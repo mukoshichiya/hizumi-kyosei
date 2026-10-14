@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1160" viewBox="0 0 900 1160">
+<defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#eeeef2"/><stop offset="1" stop-color="#bfc0c9"/></linearGradient><pattern id="dots" width="32" height="32" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1.5" fill="#777c91" opacity=".12"/></pattern></defs>
+<rect width="900" height="1160" fill="url(#g)"/>
+<rect width="900" height="1160" fill="url(#dots)"/>
+<circle cx="723" cy="193" r="210" fill="none" stroke="#fff" stroke-width="1.5" opacity=".55"/>
+<path d="M0 205H900M0 956H900" stroke="#777c91" stroke-opacity=".24"/>
+<circle cx="516" cy="470" r="235" fill="#eeeef2" opacity=".48"/><path d="M205 1180 Q250 793 444 776 Q633 811 710 1180" fill="#777c91" opacity="0.40"/><ellipse cx="480" cy="482" rx="125" ry="159" fill="#777c91" opacity=".44"/><path d="M339 463 Q342 260 502 260 Q675 295 618 560 Q556 431 472 418Z" fill="#777c91" opacity=".58"/>
+<path d="M84 156V82H166M815 995v83h-84" stroke="#777c91" stroke-width="2" fill="none" opacity=".56"/>
+<g font-family="Arial, sans-serif" fill="#777c91"><text x="66" y="72" font-size="22" letter-spacing="5">CHARACTER ARCHIVE</text><text x="65" y="1028" font-size="27" font-weight="700" letter-spacing="5">IMAGE 02</text><text x="65" y="1070" font-size="18" letter-spacing="3">REPLACE WITH YOUR ART</text><text x="827" y="1080" text-anchor="end" font-size="16" letter-spacing="3">SAMPLE</text></g>
+</svg>

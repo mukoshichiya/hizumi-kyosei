@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1160" viewBox="0 0 900 1160">
+<defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#f8eae6"/><stop offset="1" stop-color="#dbb9b0"/></linearGradient><pattern id="dots" width="32" height="32" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1.5" fill="#ae8a83" opacity=".12"/></pattern></defs>
+<rect width="900" height="1160" fill="url(#g)"/>
+<rect width="900" height="1160" fill="url(#dots)"/>
+<circle cx="723" cy="193" r="210" fill="none" stroke="#fff" stroke-width="1.5" opacity=".55"/>
+<path d="M0 205H900M0 956H900" stroke="#ae8a83" stroke-opacity=".24"/>
+<circle cx="305" cy="399" r="215" fill="#f8eae6" opacity=".45"/><path d="M174 1140 Q233 730 441 740 Q611 745 680 1140" fill="#ae8a83" opacity=".42"/><ellipse cx="421" cy="467" rx="103" ry="144" fill="#ae8a83" opacity=".47"/><path d="M307 420 Q301 235 421 252 Q575 241 558 495 Q518 378 438 380 Q360 384 307 420" fill="#ae8a83" opacity=".60"/>
+<path d="M84 156V82H166M815 995v83h-84" stroke="#ae8a83" stroke-width="2" fill="none" opacity=".56"/>
+<g font-family="Arial, sans-serif" fill="#ae8a83"><text x="66" y="72" font-size="22" letter-spacing="5">CHARACTER ARCHIVE</text><text x="65" y="1028" font-size="27" font-weight="700" letter-spacing="5">IMAGE 03</text><text x="65" y="1070" font-size="18" letter-spacing="3">REPLACE WITH YOUR ART</text><text x="827" y="1080" text-anchor="end" font-size="16" letter-spacing="3">SAMPLE</text></g>
+</svg>
