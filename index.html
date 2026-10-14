@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f4f1" />
+    <meta name="description" content="オリジナルキャラクター紹介サイト" />
+    <title>歪矯正 | CHARACTER ARCHIVE</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="characters.js" defer></script>
+    <script src="config.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="site-header">
+        <a class="brand" href="#/" aria-label="キャラクター一覧に戻る">
+          <span class="brand-mark" aria-hidden="true">✳</span>
+          <span class="brand-text"><strong id="site-brand">歪矯正</strong><small>CHARACTER ARCHIVE</small></span>
+        </a>
+        <nav class="header-nav" aria-label="メインメニュー">
+          <a href="#/" id="index-link" class="nav-active">CHARACTERS</a>
+          <span class="header-index" id="header-count">00 FILES</span>
+          <button class="admin-nav-button" type="button" id="admin-nav-button">管理者ログイン</button>
+        </nav>
+      </header>
+
+      <main id="app" tabindex="-1"></main>
+
+      <footer class="site-footer">
+        <span>CHARACTER ARCHIVE <span class="footer-star">✳</span> <span id="footer-brand">歪矯正</span></span>
+        <span>MADE FOR YOUR ORIGINAL STORIES</span>
+      </footer>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <dialog id="login-dialog" class="admin-dialog" aria-labelledby="login-heading">
+      <form id="login-form">
+        <div class="dialog-head"><h2 id="login-heading">管理者ログイン</h2><button type="button" class="dialog-x" id="login-close" aria-label="閉じる">×</button></div>
+        <p>歪矯正の編集者専用です。</p>
+        <label>メールアドレス<input id="login-email" type="email" autocomplete="username" required /></label>
+        <label>パスワード<input id="login-password" type="password" autocomplete="current-password" required /></label>
+        <p class="form-error" id="login-error" role="alert"></p>
+        <button type="submit" class="action-primary" id="login-submit">ログイン</button>
+      </form>
+    </dialog>
+    <input id="image-file-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+    <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="画像を拡大表示" aria-hidden="true" hidden>
+      <button class="lightbox-close" id="lightbox-close" type="button" aria-label="拡大表示を閉じる">×</button>
+      <button class="lightbox-arrow lightbox-prev" id="lightbox-prev" type="button" aria-label="前の画像">←</button>
+      <figure class="lightbox-figure">
+        <img id="lightbox-img" src="" alt="" />
+        <figcaption id="lightbox-caption"></figcaption>
+      </figure>
+      <button class="lightbox-arrow lightbox-next" id="lightbox-next" type="button" aria-label="次の画像">→</button>
+    </div>
+  </body>
+</html>
