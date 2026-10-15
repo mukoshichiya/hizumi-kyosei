@@ -1,4 +1,4 @@
-/* 歪矯正 ver.0.6: 所属別一覧・専用サムネイル・プロフィール並べ替え・番号編集 */
+/* 歪矯正 ver.0.7: キャラクターと事件の相互参照・時系列事件記録 */
 (() => {
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -27,6 +27,7 @@
   const state = {
     db: null, connected: false, admin: false, edit: false, busy: false, chars: [],
     search: '', current: null, imageIndex: 0, lightboxOpen: false, focusedBefore: null,
+    incidents: [], incidentPeople: [], incidentError: '', incidentSearch: '', incidentSort: 'asc', incidentTab: 'overview',
     uploadTarget: null, loadError: '',
   };
   const h = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
@@ -62,6 +63,48 @@
     const match = location.hash.match(/^#\/character\/([^/]+)\/?$/);
     if (!match) return null;
     try { return decodeURIComponent(match[1]); } catch { return null; }
+  }
+  function currentRoute() {
+    const path = location.hash || '#/';
+    if (path === '#/incidents' || path === '#/incidents/') return {type:'incidents'};
+    const match = path.match(/^#\/incident\/([^/]+)\/?$/);
+    if (match) {
+      try { return {type:'incident',slug:decodeURIComponent(match[1])}; }
+      catch { return {type:'not-found'}; }
+    }
+    if (path.startsWith('#/character/')) return {type:'character',slug:routeSlug()};
+    return {type:'characters'};
+  }
+  function sortedIncidents(items) {
+    const dir = state.incidentSort === 'desc' ? -1 : 1;
+    return [...items].sort((a,b) => {
+      if (a.sortYear == null && b.sortYear == null) return a.name.localeCompare(b.name,'ja');
+      if (a.sortYear == null) return 1;
+      if (b.sortYear == null) return -1;
+      return (a.sortYear - b.sortYear)*dir || a.name.localeCompare(b.name,'ja');
+    });
+  }
+  function normalizeIncident(i) {
+    return {
+      dbId:i.id, slug:i.slug, name:i.name, occurredLabel:i.occurred_label || '年代未設定',
+      sortYear:i.sort_year, place:i.place || '', overview:i.overview || '',
+      damage:i.damage || '', published:i.is_published,
+    };
+  }
+  async function loadIncidents() {
+    const [events,people] = await Promise.all([
+      state.db.from('incidents').select('*'),
+      state.db.from('incident_people').select('*'),
+    ]);
+    if (events.error || people.error) {
+      state.incidentError = errorText(events.error || people.error);
+      state.incidents = []; state.incidentPeople = [];
+      console.warn('Incident tables are not ready:',state.incidentError);
+      return;
+    }
+    state.incidents = events.data.map(normalizeIncident);
+    state.incidentPeople = people.data || [];
+    state.incidentError = '';
   }
   function safeImage(item) { return item?.url || PLACEHOLDER; }
   function affiliationOf(c) { return (c.affiliation || '').trim() || '所属未設定'; }
@@ -136,6 +179,7 @@
       ];
     }
     state.chars = mapped;
+    await loadIncidents();
     state.loadError = '';
   }
   async function refresh(showToast = false) {
@@ -150,7 +194,8 @@
     }
   }
   function draw() {
-    $('#header-count').textContent = `${String(state.chars.length).padStart(2,'0')} FILES`;
+    const incidentPage = ['incidents','incident'].includes(currentRoute().type);
+    $('#header-count').textContent = incidentPage ? `${String(state.incidents.length).padStart(2,'0')} INCIDENTS` : `${String(state.chars.length).padStart(2,'0')} FILES`;
     const nav = $('#admin-nav-button');
     nav.textContent = state.admin ? (state.edit ? '編集を終了' : '編集モード') : '管理者ログイン';
     let logout = $('#logout-button');
@@ -173,9 +218,17 @@
     }
     const slug = routeSlug();
     const character = state.chars.find(c => c.slug === slug);
-    $('#index-link').classList.toggle('nav-active', !character);
+    const route = currentRoute();
+    $('#index-link').classList.toggle('nav-active', route.type === 'characters' || route.type === 'character');
+    $('#incidents-link').classList.toggle('nav-active', route.type === 'incidents' || route.type === 'incident');
     closeLightbox();
-    if (character) renderCharacter(character); else renderIndex();
+    if (route.type === 'characters') renderIndex();
+    else if (route.type === 'character' && character) renderCharacter(character);
+    else if (route.type === 'incidents') renderIncidents();
+    else if (route.type === 'incident') {
+      const incident = state.incidents.find(i => i.slug === route.slug);
+      if (incident) renderIncident(incident); else renderNotFound('事件が見つかりませんでした。','#/incidents');
+    } else renderNotFound('ページが見つかりませんでした。','#/');
   }
   function renderIndex() {
     state.current = null;
@@ -216,6 +269,209 @@
     $('#empty-message').hidden = filtered.length !== 0;
     if (!filtered.length) $('#empty-message').textContent = state.search ? '検索条件に合うキャラクターは見つかりませんでした。' : (state.connected ? '公開中のキャラクターはまだありません。管理者としてログインすると追加できます。' : '該当するキャラクターは見つかりませんでした。');
   }
+  /* INCIDENT ARCHIVES / 事件関連 */
+  function renderNotFound(text,link) {
+    state.current = null;
+    app.innerHTML = `<section class="error-panel"><h1>${h(text)}</h1><p>非公開、または削除された記録の可能性があります。</p><a class="action-secondary incident-inline-link" href="${h(link)}">一覧に戻る →</a></section>`;
+  }
+  function incidentTableAlert() {
+    if (!state.incidentError) return '';
+    return `<div class="incident-setup-alert" role="status"><strong>事件記録の準備が必要です</strong><p>サイトのファイル更新とは別に、SupabaseのSQL Editorで <code>STEP_12_INCIDENTS_SQL.sql</code> を一度実行してください。その後、この画面を再読み込みしてください。</p><small>接続結果：${h(state.incidentError)}</small></div>`;
+  }
+  function incidentCard(i) {
+    return `<a class="incident-card" href="#/incident/${encodeURIComponent(i.slug)}" aria-label="${h(i.name)}の詳細を開く">
+      <span class="incident-card-date">${h(i.occurredLabel)}</span>
+      <span class="incident-card-content"><strong>${h(i.name)}</strong><small><span aria-hidden="true">⌖</span> ${h(i.place || '場所未設定')}</small></span>
+      ${state.admin && !i.published ? '<span class="incident-draft">非公開</span>' : ''}
+      <span class="incident-card-arrow" aria-hidden="true">↗</span>
+    </a>`;
+  }
+  function renderIncidents() {
+    state.current = null;
+    document.title = `事件記録 | ${SITE_SETTINGS.siteName}`;
+    const editing = state.admin && state.edit;
+    app.innerHTML = `<section class="index-heading incident-index-heading">
+      <div class="eyebrow"><span class="eyebrow-line"></span> INCIDENT ARCHIVES <span class="eyebrow-number">/ 002</span></div>
+      <div class="title-row"><h1>INCIDENTS<span class="title-period">.</span></h1><span class="title-deco" aria-hidden="true">✳</span></div>
+      <div class="index-bottom"><div><p class="subtitle">事件記録</p><p class="intro">時の流れに刻まれた出来事の記録。事件名を選択すると、その経緯や被害、関係者を確認できます。</p></div><span class="section-count">${String(state.incidents.length).padStart(2,'0')} / INCIDENTS</span></div>
+    </section>
+    <section class="index-content incident-index-content">
+      <div class="section-toolbar"><div class="section-name"><span class="section-icon">✳</span> CHRONOLOGICAL RECORDS</div>
+        <div class="incident-list-tools"><label class="search-box"><span aria-hidden="true">⌕</span><input id="incident-search" type="search" placeholder="事件名・年代・場所で検索" aria-label="事件記録を検索" value="${h(state.incidentSearch)}" /></label>
+        <label class="incident-sort-label">並び順<select id="incident-sort"><option value="asc" ${state.incidentSort==='asc'?'selected':''}>古い年代から</option><option value="desc" ${state.incidentSort==='desc'?'selected':''}>新しい年代から</option></select></label></div></div>
+      ${incidentTableAlert()}
+      ${editing && !state.incidentError ? `<div class="editor-bar"><button type="button" id="add-incident" class="action-primary">＋ 新しい事件を追加</button><button type="button" id="backup-json" class="action-secondary">情報をJSONで保存</button></div>` : ''}
+      <div id="incident-results" class="incident-list" aria-live="polite"></div>
+    </section>`;
+    $('#incident-search').addEventListener('input',e=>{state.incidentSearch=e.target.value;populateIncidents();});
+    $('#incident-sort').addEventListener('change',e=>{state.incidentSort=e.target.value;populateIncidents();});
+    if ($('#add-incident')) $('#add-incident').addEventListener('click',createIncident);
+    if ($('#backup-json')) $('#backup-json').addEventListener('click',downloadBackup);
+    populateIncidents();
+  }
+  function populateIncidents() {
+    const q = state.incidentSearch.trim().toLocaleLowerCase('ja-JP');
+    const items = sortedIncidents(state.incidents.filter(i =>
+      `${i.name} ${i.occurredLabel} ${i.place}`.toLocaleLowerCase('ja-JP').includes(q)));
+    $('#incident-results').innerHTML = items.length ? items.map(incidentCard).join('') :
+      `<p class="empty-message">${state.incidentError ? '事件記録の準備が完了していません。' : q ? '一致する事件が見つかりませんでした。' : 'まだ登録された事件はありません。'}</p>`;
+  }
+  function linksOfIncident(i) { return state.incidentPeople.filter(p => p.incident_id === i.dbId); }
+  function incidentPersonCard(link) {
+    const c=state.chars.find(c=>c.dbId===link.character_id);
+    if (!c) return '';
+    return `<a class="incident-person-card" href="#/character/${encodeURIComponent(c.slug)}"><img src="${escapeSrc(cardVisual(c))}" alt="" loading="lazy"/><span class="incident-person-text"><strong>${h(c.name)}</strong><small>${h(link.role || '関係者')}</small></span><span class="incident-card-arrow" aria-hidden="true">↗</span></a>`;
+  }
+  function incidentPersonEditorRow(char,role='') {
+    return `<div class="incident-person-edit-row" data-character-id="${h(char.dbId)}">
+      <img src="${escapeSrc(cardVisual(char))}" alt="" loading="lazy"/>
+      <span class="incident-person-edit-name">${h(char.name)}</span>
+      <label>関わり方<input data-person-role type="text" maxlength="200" placeholder="例：目撃者・被害者・加害者" value="${h(role)}" /></label>
+      <button type="button" class="action-danger incident-remove-person" aria-label="${h(char.name)}を関係者から外す">×</button>
+    </div>`;
+  }
+  function incidentReadPanel(i,tab) {
+    if (tab === 'overview') return `<div class="incident-prose">${h(i.overview || '概要はまだ記録されていません。')}</div>`;
+    if (tab === 'damage') return `<div class="incident-prose">${h(i.damage || '被害状況はまだ記録されていません。')}</div>`;
+    const rows = linksOfIncident(i).map(incidentPersonCard).filter(Boolean);
+    return rows.length ? `<div class="incident-people-grid">${rows.join('')}</div>` : '<p class="incident-empty">関係者はまだ登録されていません。</p>';
+  }
+  function renderIncident(i) {
+    state.current = null;
+    document.title = `${i.name} | ${SITE_SETTINGS.siteName}`;
+    const editing = state.admin && state.edit;
+    const links = linksOfIncident(i);
+    const people = links.map(link=>({char:state.chars.find(c=>c.dbId===link.character_id),role:link.role})).filter(x=>x.char);
+    const top = editing ? `<form id="incident-edit-form" class="incident-edit-form">
+      <div class="incident-edit-meta">
+        <label>事件名<input name="name" type="text" required maxlength="160" value="${h(i.name)}" /></label>
+        <label>年代（表示用）<input name="occurred_label" type="text" maxlength="120" placeholder="例：2150年 / 第三紀 / 時期不明" value="${h(i.occurredLabel)}" /></label>
+        <label>時系列の並び順（年数）<input name="sort_year" type="number" step="1" min="-2147483648" max="2147483647" placeholder="例：2150。未設定なら末尾" value="${i.sortYear == null ? '' : h(i.sortYear)}" /><small>「2050年」「紀元前100年」などは自動判定します。独自の紀年法はここに年数を指定してください。未設定の事件は末尾になります。</small></label>
+        <label>発生場所<input name="place" type="text" maxlength="240" value="${h(i.place)}" /></label>
+      </div>
+      <div class="incident-tabs" role="tablist" aria-label="事件の記録項目">
+        ${incidentTabButtons()}
+      </div>
+      <div data-incident-panel="overview" class="incident-panel" ${state.incidentTab==='overview'?'':'hidden'}><label>事件の概要<textarea name="overview" rows="10" maxlength="50000" placeholder="発生した経緯や結末などを自由に記入してください。">${h(i.overview)}</textarea></label></div>
+      <div data-incident-panel="damage" class="incident-panel" ${state.incidentTab==='damage'?'':'hidden'}><label>被害の記録<textarea name="damage" rows="10" maxlength="50000" placeholder="人的被害・施設の損壊・事件の影響などを記入してください。">${h(i.damage)}</textarea></label></div>
+      <div data-incident-panel="people" class="incident-panel" ${state.incidentTab==='people'?'':'hidden'}>
+        <p class="incident-help">既存のキャラクター一覧から登録できます。役割は空欄でも構いません。追加・解除した内容は下の「変更を保存」で確定します。</p>
+        <div id="incident-person-editor-list" class="incident-person-editor-list">${people.map(x=>incidentPersonEditorRow(x.char,x.role)).join('')}</div>
+        <div class="incident-person-add"><select id="incident-person-select" aria-label="関係者として登録するキャラクター"><option value="">キャラクターを選択</option>${state.chars.map(c=>`<option value="${h(c.dbId)}">${h(c.name)}（${h(affiliationOf(c))}）</option>`).join('')}</select><button type="button" id="incident-add-person" class="action-secondary">＋ 関係者に追加</button></div>
+      </div>
+      <label class="incident-publish-check"><input name="published" type="checkbox" ${i.published?'checked':''} /> この事件を一般公開する</label>
+      <div class="editor-actions"><button class="action-primary" type="submit">変更を保存</button><button id="delete-incident" class="action-danger" type="button">事件を削除</button></div>
+    </form>` : `<div class="incident-tabs" role="tablist" aria-label="事件の記録項目">${incidentTabButtons()}</div><section id="incident-read-panel" class="incident-panel" role="tabpanel">${incidentReadPanel(i,state.incidentTab)}</section>`;
+    app.innerHTML = `<section class="detail-top"><a href="#/incidents" class="back-link"><span>←</span> BACK TO INCIDENTS</a><span class="detail-file">INCIDENT RECORD <span class="file-num">/ ${h(i.occurredLabel)}</span></span></section>
+      <section class="incident-detail"><div class="eyebrow"><span class="eyebrow-line"></span> INCIDENT FILE</div>
+        <h1>${h(i.name)}</h1><div class="incident-meta"><span>◷ ${h(i.occurredLabel)}</span><span>⌖ ${h(i.place || '場所未設定')}</span>${state.admin&&!i.published?'<span class="incident-draft">非公開</span>':''}</div>
+        ${top}
+      </section><div class="bottom-navigation"><a href="#/incidents">← RETURN TO ALL INCIDENTS</a><span>END OF INCIDENT FILE</span></div>`;
+    $$('.incident-tab').forEach(btn=>btn.addEventListener('click',()=>switchIncidentTab(i,btn.dataset.tab)));
+    if (editing) {
+      $('#incident-edit-form').addEventListener('submit',e=>saveIncident(e,i));
+      $('#delete-incident').addEventListener('click',()=>deleteIncident(i));
+      $('#incident-add-person').addEventListener('click',addIncidentPerson);
+      $('#incident-person-editor-list').addEventListener('click',event=>{
+        const btn=event.target.closest('.incident-remove-person');
+        if (btn) btn.closest('.incident-person-edit-row').remove();
+      });
+    }
+  }
+  function incidentTabButtons() {
+    const names={overview:'概要',damage:'被害',people:'関係者'};
+    return Object.entries(names).map(([key,label])=>`<button type="button" class="incident-tab ${state.incidentTab===key?'selected':''}" data-tab="${key}" role="tab" aria-selected="${state.incidentTab===key}">${label}</button>`).join('');
+  }
+  function switchIncidentTab(i,tab) {
+    state.incidentTab = tab;
+    $$('.incident-tab').forEach(btn=>{
+      const on=btn.dataset.tab===tab;
+      btn.classList.toggle('selected',on); btn.setAttribute('aria-selected',String(on));
+    });
+    if (state.admin && state.edit) {
+      $$('[data-incident-panel]').forEach(el=>{el.hidden=el.dataset.incidentPanel!==tab;});
+    } else $('#incident-read-panel').innerHTML=incidentReadPanel(i,tab);
+  }
+  function addIncidentPerson() {
+    const id=$('#incident-person-select').value;
+    const c=state.chars.find(c=>c.dbId===id);
+    if (!c) return message('登録するキャラクターを選択してください。',true);
+    if ($$('.incident-person-edit-row').some(r=>r.dataset.characterId===id)) return message('このキャラクターは登録済みです。',true);
+    $('#incident-person-editor-list').insertAdjacentHTML('beforeend',incidentPersonEditorRow(c));
+    $('#incident-person-select').value='';
+  }
+  async function createIncident() {
+    if (state.incidentError || state.busy) return;
+    const name=prompt('新しい事件の名前を入力してください。');
+    if (name===null) return;
+    if (!name.trim()) return message('事件名を入力してください。',true);
+    const slug=`incident-${uuid()}`;
+    await mutation(async()=>{
+      const {data,error}=await state.db.from('incidents').insert({slug,name:name.trim().slice(0,160),is_published:false})
+        .select('id').single();
+      if (error||!data) throw error||Error('事件を登録できませんでした。');
+    },'事件を非公開で作成しました。');
+    if (state.incidents.some(i=>i.slug===slug)) {state.incidentTab='overview';location.hash=`#/incident/${encodeURIComponent(slug)}`;}
+  }
+  function inferredSortYear(label) {
+    // 「2050年」「2050年代」「紀元前100年」など、明確な年表記だけ自動変換します。
+    const text=label.trim();
+    const bce=text.match(/^紀元前\s*([0-9]{1,4})年/);
+    if (bce) return -Number(bce[1]);
+    const ce=text.match(/^(?:西暦\s*)?([0-9]{1,4})(?:年|年代|$)/);
+    return ce ? Number(ce[1]) : null;
+  }
+  function saveIncident(event,i) {
+    event.preventDefault();
+    const form=event.currentTarget;
+    const f=new FormData(form);
+    const name=String(f.get('name')||'').trim();
+    if (!name) return message('事件名を入力してください。',true);
+    const yearLabel=String(f.get('occurred_label')||'').trim()||'年代未設定';
+    const rawYear=String(f.get('sort_year')||'').trim();
+    const sortYear=rawYear===''?inferredSortYear(yearLabel):Number(rawYear);
+    if (sortYear!==null && (!Number.isSafeInteger(sortYear)||sortYear< -2147483648||sortYear>2147483647))
+      return message('並び順の年数は整数で入力してください。',true);
+    const selection=$$('.incident-person-edit-row').map(row=>({
+      incident_id:i.dbId,character_id:row.dataset.characterId,
+      role:$('[data-person-role]',row).value.trim(),
+    }));
+    mutation(async()=>{
+      const {data,error}=await state.db.from('incidents').update({
+        name,occurred_label:yearLabel,
+        sort_year:sortYear,place:String(f.get('place')||'').trim(),
+        overview:String(f.get('overview')||''),damage:String(f.get('damage')||''),
+        is_published:f.get('published')==='on',
+      }).eq('id',i.dbId).select('id').single();
+      if (error || !data) throw error||Error('更新対象が見つかりません。');
+      if (selection.length) {
+        const {error:linkError}=await state.db.from('incident_people').upsert(selection,{onConflict:'incident_id,character_id'});
+        if (linkError) throw linkError;
+      }
+      for (const old of linksOfIncident(i)) {
+        if (selection.some(p=>p.character_id===old.character_id)) continue;
+        const {error:delError}=await state.db.from('incident_people').delete()
+          .eq('incident_id',i.dbId).eq('character_id',old.character_id);
+        if (delError) throw delError;
+      }
+    },'事件記録を保存しました。');
+  }
+  async function deleteIncident(i) {
+    if (!confirm(`「${i.name}」を削除しますか？\n概要・被害・関係者の登録も消えます。元には戻せません。`)) return;
+    await mutation(async()=>{
+      const {error}=await state.db.from('incidents').delete().eq('id',i.dbId);
+      if (error) throw error;
+      location.hash='#/incidents';
+    },'事件を削除しました。');
+  }
+  function relatedIncidentsForCharacter(c) {
+    if (!c.dbId || state.incidentError) return '';
+    const related=sortedIncidents(state.incidents.filter(i=>state.incidentPeople.some(p=>p.character_id===c.dbId&&p.incident_id===i.dbId)));
+    if (!related.length) return '';
+    return `<section class="related-incidents"><div class="profile-title">RELATED INCIDENTS <span>↗</span></div>
+      <p class="related-incidents-heading">関連事件</p><div class="incident-list">${related.map(incidentCard).join('')}</div></section>`;
+  }
+
   function oneProfileEditField(field = {label:'',value:''}) {
     return `<div class="edit-profile-row">
       <input aria-label="項目名" class="field-label" placeholder="項目名" maxlength="60" value="${h(field.label)}"/>
@@ -272,6 +528,7 @@
       <section class="detail-top"><a class="back-link" href="#/"><span>←</span> BACK TO CHARACTERS</a><span class="detail-file">CHARACTER FILE <span class="file-num">/ ${h(c.number)}</span></span></section>
       <section class="detail-main"><div class="detail-art"><div class="main-art-frame"><button id="main-image-button" type="button" class="main-image-button" aria-label="${editing?'画像を変更':'現在の画像を拡大表示'}"><img id="detail-main-img" src="${escapeSrc(mainVisual(c))}" alt="${h(c.name)}の画像" /><span class="zoom-hint">${editing?'↗ TAP TO REPLACE':'↗ CLICK TO ENLARGE'}</span></button></div>${editMain}<span class="art-corner-label">© ORIGINAL CHARACTER ARCHIVE</span></div>
         <div class="detail-info"><div class="detail-info-top"><span class="character-tag"><span class="tag-dot"></span> ${h(c.category)}</span><span class="detail-number">NO. ${h(c.number)} ${state.admin&&!c.published?' / 非公開':''}</span></div>${textSection}</div></section>
+      ${relatedIncidentsForCharacter(c)}
       <section class="gallery-section" aria-label="画像ギャラリー"><div class="gallery-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> ADDITIONAL VISUALS</div><h2>GALLERY<span class="title-period">.</span></h2></div><p>${editing?'画像の差し替え・削除や並び替えができます。':'画像を選択して切り替えられます。'}<br/>拡大表示では左右の画像へ移動できます。</p></div>
         <div class="gallery-toolbar"><div><span id="gallery-current">${c.imageItems.length?'01':'00'}</span> <span class="gallery-slash">/</span> ${String(c.imageItems.length).padStart(2,'0')}</div><div class="gallery-buttons"><button id="gallery-prev" type="button" aria-label="前の画像">←</button><button id="gallery-next" type="button" aria-label="次の画像">→</button></div></div>
         ${editing?'<div class="editor-bar"><button id="gallery-add" class="action-primary" type="button">＋ 画像を追加</button></div>':''}<div id="gallery-thumbs" class="gallery-thumbs"></div></section>
@@ -589,13 +846,21 @@
       profile:c.profile,published:c.published,mainPath:c.mainPath,thumbnailPath:c.thumbnailPath,
       gallery:c.extraImages?.map(i=>({path:i.storage_path,caption:i.caption,sortOrder:i.sort_order}))||[],
     }));
-    const blob = new Blob([JSON.stringify({exportedAt:new Date().toISOString(),characters:data},null,2)],{type:'application/json'});
+    const incidents=state.incidents.map(i=>({
+      slug:i.slug,name:i.name,occurredLabel:i.occurredLabel,sortYear:i.sortYear,
+      place:i.place,overview:i.overview,damage:i.damage,published:i.published,
+      people:linksOfIncident(i).map(p=>({
+        characterSlug:state.chars.find(c=>c.dbId===p.character_id)?.slug||null,
+        role:p.role,
+      })),
+    }));
+    const blob = new Blob([JSON.stringify({exportedAt:new Date().toISOString(),characters:data,incidents},null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob), a=document.createElement('a');
     a.href=url;a.download=`hizumi-kyosei-backup-${new Date().toISOString().slice(0,10)}.json`;
     document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
-    message('文章・設定のJSONを保存しました。画像そのものは含まれません。');
+    message('キャラクター・事件・関係者のJSONを保存しました。画像そのものは含まれません。');
   }
-  window.addEventListener('hashchange', () => { state.imageIndex=0; draw(); window.scrollTo(0,0); });
+  window.addEventListener('hashchange', () => { state.imageIndex=0; state.incidentTab='overview'; draw(); window.scrollTo(0,0); });
   async function loadSupabaseSDK() {
     if (window.supabase?.createClient) return;
     await new Promise((resolve, reject) => {

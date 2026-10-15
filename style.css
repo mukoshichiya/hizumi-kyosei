@@ -283,3 +283,113 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   .thumbnail-editor-body { gap: 13px; }
   .thumbnail-preview { width: min(40%, 140px); }
 }
+
+/* 歪矯正 ver.0.7 | 事件記録 */
+.incident-index-heading .title-row h1 { font-size: clamp(45px, 9.5vw, 133px); }
+.incident-list-tools { display:flex; justify-content:flex-end; gap:12px; align-items:center; flex-wrap:wrap; }
+.incident-list-tools .search-box { min-width: 200px; width: min(100%, 300px); }
+.incident-list-tools .search-box > span { color:var(--accent); font-size:22px; line-height:1; }
+.incident-sort-label { display:flex; align-items:center; gap:8px; font-weight:700; font-size:11px; color:var(--muted); white-space:nowrap; }
+.incident-sort-label select,.incident-person-add select { background:var(--paper); color:var(--ink); padding:11px 30px 11px 12px; border:1px solid var(--line); border-radius:4px; font-size:12px; min-height:42px; max-width:100%; }
+.incident-list { display:flex; flex-direction:column; gap:10px; }
+.incident-card { display:flex; align-items:center; gap:clamp(10px,2.8vw,34px); min-height:95px; width:100%; border:1px solid var(--line); background:var(--paper); padding:17px clamp(15px,3.1vw,36px); transition:border-color .18s,transform .18s,background .18s; }
+.incident-card:hover { border-color:#9aa7ed; background:#fdfdff; transform:translateX(3px); }
+.incident-card:focus-visible { border-color:var(--accent); }
+.incident-card-date { font-size:clamp(11px,1.5vw,15px); font-weight:800; min-width:clamp(83px,12vw,145px); color:var(--accent); overflow-wrap:anywhere; }
+.incident-card-content { min-width:0; flex:1; display:flex; flex-direction:column; gap:10px; }
+.incident-card-content strong { display:block; font-size:clamp(16px,2.3vw,22px); line-height:1.55; font-weight:850; overflow-wrap:anywhere; }
+.incident-card-content small { display:block; font-size:11px; color:var(--muted); overflow-wrap:anywhere; }
+.incident-card-content small span { font-size:15px; color:var(--accent); padding-right:4px; }
+.incident-card-arrow { color:var(--accent); font-size:25px; margin-left:auto; flex:none; }
+.incident-draft { display:inline-block; padding:6px 9px; border-radius:2px; color:#846300; background:#fff0c0; font-size:10px; font-weight:700; white-space:nowrap; }
+.incident-setup-alert { padding:20px 23px; background:#fff2d7; border:1px solid #e3c688; margin-bottom:20px; line-height:1.9; }
+.incident-setup-alert strong { font-size:15px; }
+.incident-setup-alert p { font-size:12px; margin:8px 0; }
+.incident-setup-alert small { font-size:10px; color:#846300; overflow-wrap:anywhere; }
+.incident-setup-alert code { overflow-wrap:anywhere; }
+.incident-inline-link { display:inline-block; }
+.incident-detail { border-top:2px solid var(--ink); padding:37px 0 clamp(90px,10vw,145px); }
+.incident-detail > h1 { font-size:clamp(34px,6.1vw,75px); font-weight:900; letter-spacing:-.045em; line-height:1.3; overflow-wrap:anywhere; margin:27px 0 24px; }
+.incident-meta { display:flex; flex-wrap:wrap; gap:14px 32px; align-items:center; font-size:12px; font-weight:700; color:#676b74; padding-bottom:38px; border-bottom:1px solid var(--line); }
+.incident-tabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; border-bottom:2px solid var(--line); margin-top:36px; }
+.incident-tab { border:0; border-bottom:3px solid transparent; background:none; color:var(--muted); font-size:clamp(13px,1.7vw,17px); font-weight:800; min-height:62px; margin-bottom:-2px; }
+.incident-tab:hover { color:var(--accent); }
+.incident-tab.selected { color:var(--accent); border-bottom-color:var(--accent); }
+.incident-panel { padding:33px 2px; min-height:150px; }
+.incident-prose { white-space:pre-wrap; font-size:clamp(13px,1.25vw,15px); line-height:2.35; overflow-wrap:anywhere; max-width:1000px; }
+.incident-empty,.incident-help { font-size:12px; color:var(--muted); line-height:1.9; }
+.incident-people-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.incident-person-card { background:var(--paper); border:1px solid var(--line); min-width:0; display:flex; align-items:center; padding:12px; gap:14px; }
+.incident-person-card:hover { border-color:var(--accent); }
+.incident-person-card img { width:75px; height:83px; object-fit:cover; background:#e9eaf0; flex:none; }
+.incident-person-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; overflow-wrap:anywhere; }
+.incident-person-text strong { font-size:15px; }
+.incident-person-text small { font-size:11px; color:var(--muted); }
+.incident-edit-form { max-width:1100px; }
+.incident-edit-meta { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:17px 24px; padding-top:29px; }
+.incident-edit-form label { display:flex; flex-direction:column; gap:8px; font-weight:750; font-size:12px; }
+.incident-edit-form label small { color:var(--muted); font-size:10px; line-height:1.6; font-weight:400; }
+.incident-edit-form input:not([type=checkbox]),.incident-edit-form textarea { display:block; width:100%; min-width:0; padding:12px; border:1px solid #d6d7da; border-radius:4px; background:var(--paper); color:var(--ink); font-size:14px; font-family:var(--sans); }
+.incident-edit-form textarea { resize:vertical; line-height:1.9; }
+.incident-person-editor-list { display:flex; flex-direction:column; gap:11px; margin:16px 0; }
+.incident-person-edit-row { display:grid; grid-template-columns:56px minmax(90px,1fr) minmax(150px,1.6fr) 42px; align-items:center; gap:12px; background:var(--paper); border:1px solid var(--line); padding:10px; }
+.incident-person-edit-row img { width:56px; height:62px; object-fit:cover; background:#e9eaf0; }
+.incident-person-edit-name { font-size:12px; font-weight:800; overflow-wrap:anywhere; }
+.incident-person-edit-row label { min-width:0; font-size:10px; color:var(--muted); }
+.incident-person-edit-row label input { font-size:12px; }
+.incident-person-edit-row .incident-remove-person { width:42px; height:42px; min-height:0; padding:3px; font-size:19px; }
+.incident-person-add { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 0 22px; }
+.incident-person-add select { flex:1; min-width:180px; }
+.incident-edit-form .incident-publish-check { display:flex; flex-direction:row; align-items:center; gap:9px; margin-top:20px; }
+.incident-publish-check input { width:19px; height:19px; accent-color:var(--accent); }
+.related-incidents { padding:0 0 95px; }
+.related-incidents-heading { margin:22px 0; font-size:12px; font-weight:800; color:var(--muted); }
+.related-incidents .incident-card { min-height:72px; }
+.related-incidents .incident-card-content strong { font-size:16px; }
+.related-incidents .incident-card-date { min-width:80px; }
+.related-incidents .incident-card-content { gap:4px; }
+@media(max-width:750px) {
+  .incident-index-heading .title-row h1 { font-size:clamp(44px,10vw,78px); }
+  .incident-list-tools { justify-content:space-between; width:100%; }
+  .incident-list-tools .search-box { flex:1; width:auto; }
+  .incident-people-grid { grid-template-columns:1fr; }
+}
+@media(max-width:640px) {
+  .header-nav #index-link { display:inline; }
+  .site-header { gap:7px; }
+  .header-nav { gap:7px; letter-spacing:0; }
+  .header-nav a { font-size:9px; }
+  .admin-nav-button { font-size:9px; padding:8px 7px; }
+  .incident-index-heading .title-row h1 { font-size:clamp(42px,9.8vw,72px); }
+  .incident-card { min-height:82px; gap:12px; padding:13px; }
+  .incident-card-date { min-width:72px; max-width:95px; font-size:11px; }
+  .incident-card-content { gap:6px; }
+  .incident-card-content strong { font-size:15px; }
+  .incident-card-content small { font-size:10px; }
+  .incident-card-arrow { font-size:21px; }
+  .incident-list-tools .search-box { min-width:0; }
+  .incident-sort-label { font-size:10px; }
+  .incident-sort-label select { font-size:10px; padding:10px 18px 10px 8px; }
+  .incident-detail { padding-top:23px; }
+  .incident-detail > h1 { font-size:34px; }
+  .incident-meta { font-size:11px; gap:10px 20px; }
+  .incident-tabs { margin-top:20px; }
+  .incident-tab { min-height:55px; }
+  .incident-edit-meta { grid-template-columns:minmax(0,1fr); }
+  .incident-person-edit-row { grid-template-columns:42px minmax(0,1fr) 40px; gap:8px; }
+  .incident-person-edit-row img { width:42px; height:51px; }
+  .incident-person-edit-row label { grid-column:1/-1; grid-row:2; }
+  .incident-person-edit-row .incident-remove-person { grid-column:3; grid-row:1; }
+  .incident-person-card img { width:58px; height:67px; }
+  .related-incidents { padding-bottom:65px; }
+}
+@media(max-width:390px) {
+  .site-header { padding-left:9px; padding-right:9px; }
+  .brand { gap:3px; }
+  .brand-mark { display:none; }
+  .brand-text small { letter-spacing:0; font-size:6px; }
+  .brand-text strong { letter-spacing:.05em; }
+  .header-nav { gap:6px; }
+  .header-nav a { font-size:8px; }
+  .admin-nav-button { padding:8px 6px; font-size:9px; }
+}
