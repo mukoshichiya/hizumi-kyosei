@@ -57,7 +57,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .card-view { position: absolute; bottom: 14px; right: 14px; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: var(--paper); font-size: 19px; transition: color .25s, background .25s; }
 .character-card:hover .card-view { color: var(--paper); background: var(--accent); }
 .card-text { padding-top: 15px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.card-text h2 { font-size: clamp(15px, 1.65vw, 22px); font-weight: 800; margin: 0 0 5px; }
+.card-text h3 { font-size: clamp(15px, 1.65vw, 22px); font-weight: 800; margin: 0 0 5px; }
 .card-text span:not(.card-arrow) { font-size: 10px; color: var(--muted); letter-spacing: .06em; }
 .card-arrow { font-size: 20px; color: var(--accent); transition: transform .25s; }
 .character-card:hover .card-arrow { transform: translateX(5px); }
@@ -152,7 +152,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   .character-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px 12px; }
   .card-number { top: 8px; left: 8px; font-size: 8px; padding: 7px; }
   .card-view { width: 25px; height: 25px; right: 8px; bottom: 8px; font-size: 15px; }
-  .card-text h2 { font-size: 15px; }
+  .card-text h3 { font-size: 15px; }
   .card-text span:not(.card-arrow) { font-size: 9px; }
   .index-content { padding-bottom: 68px; }
   .detail-top { padding: 23px 0; }
@@ -244,4 +244,42 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   .gallery-edit-controls { gap:4px; }
   .gallery-edit-controls button { padding:5px 7px; }
   .toast { left:15px; right:15px; bottom:15px; max-width:none; }
+}
+
+/* 歪矯正 ver.0.6: 所属セクション・独立サムネイル・モバイル用編集操作 */
+.character-groups { display: flex; flex-direction: column; gap: 65px; }
+.affiliation-group { min-width: 0; }
+.affiliation-heading {
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid var(--line); margin: 0 0 25px;
+  padding: 0 0 17px; gap: 12px;
+}
+.affiliation-heading-title { display: flex; align-items: baseline; gap: 13px; min-width: 0; }
+.affiliation-mark { color: var(--accent); font-size: 16px; flex: none; }
+.affiliation-heading h2 { font-size: clamp(19px, 2.4vw, 28px); font-weight: 850; margin: 0; overflow-wrap: anywhere; line-height: 1.5; }
+.affiliation-count { font-size: 10px; color: var(--muted); font-weight: 800; letter-spacing: .13em; white-space: nowrap; }
+.character-card .card-text h3 { font-size: clamp(15px, 1.65vw, 22px); font-weight: 800; margin: 0 0 5px; }
+.character-edit-form .edit-hint { display: block; font-size: 11px; color: #767984; font-weight: 400; line-height: 1.75; }
+.thumbnail-editor { margin: 22px 0 30px; }
+.thumbnail-editor .profile-title { margin-bottom: 12px; }
+.thumbnail-editor-body { display: flex; align-items: start; gap: 18px; margin-top: 15px; }
+.thumbnail-preview { width: min(36%, 170px); height: auto; aspect-ratio: 3 / 3.7; object-fit: cover; background: #e6e8ed; border: 1px solid var(--line); flex: none; }
+.thumbnail-editor-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
+.thumbnail-editor-actions .edit-hint { max-width: 320px; }
+.edit-profile-row { grid-template-columns: minmax(75px,1fr) minmax(100px,2fr) auto; align-items: center; }
+.profile-row-controls { display: flex; align-items: center; gap: 4px; }
+.profile-row-controls button { width: 37px; height: 40px; border: 1px solid #cfd1d9; background: white; border-radius: 4px; font-size: 16px; color: #373944; }
+.profile-row-controls button:disabled { opacity: .35; cursor: not-allowed; }
+.profile-row-controls button.remove-field { color: #ab3030; background: #fff1f1; border-color: #ebd3d3; }
+@media (max-width: 640px) {
+  .character-groups { gap: 44px; }
+  .affiliation-heading { align-items: end; margin-bottom: 17px; padding-bottom: 10px; }
+  .affiliation-heading h2 { font-size: 19px; }
+  .affiliation-count { font-size: 9px; }
+  .character-card .card-text h3 { font-size: 15px; }
+  .edit-profile-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 6px; padding: 9px; background: #f1f1ee; border-radius: 5px; }
+  .profile-row-controls { grid-column: 1 / -1; justify-content: flex-end; }
+  .profile-row-controls button { width: 46px; height: 42px; }
+  .thumbnail-editor-body { gap: 13px; }
+  .thumbnail-preview { width: min(40%, 140px); }
 }

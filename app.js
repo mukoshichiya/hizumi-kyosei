@@ -1,4 +1,4 @@
-/* 歪矯正: キャラクターアーカイブ＋Supabase管理者モード (静的サイト対応) */
+/* 歪矯正 ver.0.6: 所属別一覧・専用サムネイル・プロフィール並べ替え・番号編集 */
 (() => {
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -64,9 +64,21 @@
     try { return decodeURIComponent(match[1]); } catch { return null; }
   }
   function safeImage(item) { return item?.url || PLACEHOLDER; }
+  function affiliationOf(c) { return (c.affiliation || '').trim() || '所属未設定'; }
+  function fallbackAffiliation(category) {
+    return category && category !== 'ORIGINAL CHARACTER' ? category : '所属未設定';
+  }
+  function mainVisual(c) {
+    return c.imageItems?.find(img => img.kind === 'main')?.url || c.mainUrl || PLACEHOLDER;
+  }
+  function cardVisual(c) { return c.thumbnailPath ? (c.thumbnailUrl || PLACEHOLDER) : mainVisual(c); }
+
   function getLocalSamples() {
     return CHARACTERS.map(c => ({
       ...copyObject(c), slug: c.id, dbId: null, published: true,
+      affiliation: c.affiliation || fallbackAffiliation(c.category),
+      thumbnailPath: c.thumbnailSrc || null, thumbnailUrl: c.thumbnailSrc || c.images[0]?.src || PLACEHOLDER,
+      mainUrl: c.images[0]?.src || PLACEHOLDER, rawProfile: {},
       imageItems: c.images.map((img, i) => ({
         ...img, path: img.src, url: img.src, kind: i === 0 ? 'main' : 'gallery',
         dbImageId: null, order: i - 1,
@@ -85,6 +97,8 @@
     return {
       dbId: c.id, slug: c.slug, id: c.slug, number: p.number || String(c.sort_order + 1).padStart(3, '0'),
       name: c.name, reading: c.name_reading || '', category: p.category || 'ORIGINAL CHARACTER',
+      affiliation: p.affiliation === undefined ? fallbackAffiliation(p.category) : p.affiliation,
+      thumbnailPath: p.thumbnailPath || null, thumbnailUrl: null, mainUrl: null, rawProfile: copyObject(p),
       catchphrase: p.catchphrase || '', description: c.description || '',
       profile: Array.isArray(p.fields) ? p.fields : [], published: c.is_published,
       sortOrder: c.sort_order, mainPath: c.main_image_path,
@@ -107,9 +121,11 @@
     if (charResult.error) throw charResult.error;
     if (imageResult.error) throw imageResult.error;
     const mapped = charResult.data.map(c => normalizeCharacter(c, imageResult.data.filter(i => i.character_id === c.id)));
-    const paths = [...new Set(mapped.flatMap(c => [c.mainPath, ...c.extraImages.map(i => i.storage_path)]).filter(Boolean))];
+    const paths = [...new Set(mapped.flatMap(c => [c.mainPath, c.thumbnailPath, ...c.extraImages.map(i => i.storage_path)]).filter(Boolean))];
     const urls = new Map(await Promise.all(paths.map(async path => [path, await signedUrl(path)])));
     for (const c of mapped) {
+      c.mainUrl = c.mainPath ? urls.get(c.mainPath) || PLACEHOLDER : PLACEHOLDER;
+      c.thumbnailUrl = c.thumbnailPath ? urls.get(c.thumbnailPath) || PLACEHOLDER : c.mainUrl;
       c.imageItems = [
         ...(c.mainPath ? [{kind:'main', path:c.mainPath, url:urls.get(c.mainPath), title:'MAIN VISUAL', caption:'メインビジュアル', order:-1}] : []),
         ...c.extraImages.map((img,i) => ({
@@ -171,7 +187,7 @@
         <div class="index-bottom"><div><p class="subtitle">${h(SITE_SETTINGS.subtitle)}</p><p class="intro">${h(SITE_SETTINGS.introduction)}</p></div><span class="section-count">${String(state.chars.length).padStart(2,'0')} / CHARACTERS</span></div></section>
       <section class="index-content"><div class="section-toolbar"><div class="section-name"><span class="section-icon">✳</span> ALL CHARACTERS</div>
         <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg><input id="character-search" type="search" placeholder="名前で検索" aria-label="キャラクターを名前で検索" value="${h(state.search)}" /></label></div>
-        ${editActions}<div id="character-grid" class="character-grid"></div><p id="empty-message" class="empty-message" hidden>該当するキャラクターは見つかりませんでした。</p></section>`;
+        ${editActions}<div id="character-groups" class="character-groups"></div><p id="empty-message" class="empty-message" hidden>該当するキャラクターは見つかりませんでした。</p></section>`;
     $('#character-search').addEventListener('input', e => { state.search = e.target.value; populateCards(); });
     if ($('#add-character')) $('#add-character').addEventListener('click', createCharacter);
     if ($('#seed-characters')) $('#seed-characters').addEventListener('click', importSamples);
@@ -180,15 +196,44 @@
   }
   function populateCards() {
     const q = state.search.trim().toLocaleLowerCase('ja-JP');
-    const filtered = state.chars.filter(c => `${c.name} ${c.reading} ${c.number}`.toLocaleLowerCase('ja-JP').includes(q));
-    $('#character-grid').innerHTML = filtered.map(c => `<a class="character-card" href="#/character/${encodeURIComponent(c.slug)}" aria-label="${h(c.name)}の紹介ページへ">
-      <div class="character-card-image"><img src="${escapeSrc(safeImage(c.imageItems[0]))}" alt="${h(c.name)}のメイン画像" loading="lazy"/><span class="card-number">NO. ${h(c.number)}</span>${state.admin&&!c.published?'<span class="draft-tag">非公開</span>':''}<span class="card-view" aria-hidden="true">↗</span></div>
-      <div class="card-text"><div><h2>${h(c.name)}</h2><span>${h(c.reading || 'CHARACTER PROFILE')}</span></div><span class="card-arrow">→</span></div></a>`).join('');
+    const filtered = state.chars.filter(c =>
+      `${c.name} ${c.reading} ${c.number} ${affiliationOf(c)}`.toLocaleLowerCase('ja-JP').includes(q));
+    // グループの順番は、元のキャラ登録順の「最初に出現した所属」の順番です。
+    // 番号の変更では表示順が勝手に変わらないようにします。
+    const groups = new Map();
+    for (const c of filtered) {
+      const affiliation = affiliationOf(c);
+      if (!groups.has(affiliation)) groups.set(affiliation, []);
+      groups.get(affiliation).push(c);
+    }
+    $('#character-groups').innerHTML = [...groups].map(([affiliation, members]) => `
+      <section class="affiliation-group" aria-label="所属：${h(affiliation)}">
+        <div class="affiliation-heading"><div class="affiliation-heading-title"><span class="affiliation-mark">✳</span><h2>${h(affiliation)}</h2></div><span class="affiliation-count">${String(members.length).padStart(2,'0')} CHARACTERS</span></div>
+        <div class="character-grid">${members.map(c => `<a class="character-card" href="#/character/${encodeURIComponent(c.slug)}" aria-label="${h(c.name)}の紹介ページへ">
+          <div class="character-card-image"><img src="${escapeSrc(cardVisual(c))}" alt="${h(c.name)}のサムネイル画像" loading="lazy"/><span class="card-number">NO. ${h(c.number)}</span>${state.admin&&!c.published?'<span class="draft-tag">非公開</span>':''}<span class="card-view" aria-hidden="true">↗</span></div>
+          <div class="card-text"><div><h3>${h(c.name)}</h3><span>${h(c.reading || 'CHARACTER PROFILE')}</span></div><span class="card-arrow">→</span></div></a>`).join('')}</div>
+      </section>`).join('');
     $('#empty-message').hidden = filtered.length !== 0;
-    if (!filtered.length) $('#empty-message').textContent = state.connected ? '公開中のキャラクターはまだありません。管理者としてログインすると追加できます。' : '該当するキャラクターは見つかりませんでした。';
+    if (!filtered.length) $('#empty-message').textContent = state.search ? '検索条件に合うキャラクターは見つかりませんでした。' : (state.connected ? '公開中のキャラクターはまだありません。管理者としてログインすると追加できます。' : '該当するキャラクターは見つかりませんでした。');
   }
-  function profileEditFields(c) {
-    return (c.profile || []).map(field => `<div class="edit-profile-row"><input aria-label="項目名" class="field-label" maxlength="60" value="${h(field.label)}"/><input aria-label="内容" class="field-value" maxlength="500" value="${h(field.value)}"/><button class="remove-field" type="button" aria-label="この項目を削除">×</button></div>`).join('');
+  function oneProfileEditField(field = {label:'',value:''}) {
+    return `<div class="edit-profile-row">
+      <input aria-label="項目名" class="field-label" placeholder="項目名" maxlength="60" value="${h(field.label)}"/>
+      <input aria-label="内容" class="field-value" placeholder="内容" maxlength="500" value="${h(field.value)}"/>
+      <div class="profile-row-controls">
+        <button class="move-field" data-field-move="up" type="button" aria-label="この項目を上へ移動">↑</button>
+        <button class="move-field" data-field-move="down" type="button" aria-label="この項目を下へ移動">↓</button>
+        <button class="remove-field" type="button" aria-label="この項目を削除">×</button>
+      </div>
+    </div>`;
+  }
+  function profileEditFields(c) { return (c.profile || []).map(oneProfileEditField).join(''); }
+  function updateProfileMoveButtons() {
+    const rows = $$('.edit-profile-row', $('#editor-fields'));
+    rows.forEach((row, i) => {
+      $('[data-field-move="up"]', row).disabled = i === 0;
+      $('[data-field-move="down"]', row).disabled = i === rows.length - 1;
+    });
   }
   function renderCharacter(c) {
     state.current = c;
@@ -200,9 +245,20 @@
       <form id="character-edit-form" class="character-edit-form">
         <label>名前<input name="name" value="${h(c.name)}" required maxlength="120" /></label>
         <label>ふりがな<input name="reading" value="${h(c.reading)}" maxlength="120" /></label>
-        <label>分類<input name="category" value="${h(c.category)}" maxlength="120" /></label>
+        <label>キャラクター番号<input name="number" value="${h(c.number)}" maxlength="20" required placeholder="001" /><small class="edit-hint">例：001、025、EX01。番号を変えてもキャラの表示順は変わりません。</small></label>
+        <label>所属<input name="affiliation" value="${h(affiliationOf(c))}" list="affiliation-suggestions" maxlength="120" placeholder="所属未設定" /><small class="edit-hint">同じ所属名のキャラは一覧で同じ見出しの下に並びます。</small></label>
+        <datalist id="affiliation-suggestions">${[...new Set(state.chars.map(affiliationOf))].map(a=>`<option value="${h(a)}"></option>`).join('')}</datalist>
+        <label>分類タグ<input name="category" value="${h(c.category)}" maxlength="120" /></label>
         <label>キャッチコピー<input name="catchphrase" value="${h(c.catchphrase)}" maxlength="300" /></label>
         <label>紹介文<textarea name="description" rows="7" maxlength="20000">${h(c.description)}</textarea></label>
+        <section class="thumbnail-editor" aria-label="一覧用サムネイル設定">
+          <div class="profile-title">LIST THUMBNAIL <span>↗</span></div>
+          <p class="edit-hint">一覧専用の画像です。メイン画像やギャラリーには影響しません。設定しない場合はメイン画像を使用します。</p>
+          <div class="thumbnail-editor-body"><img class="thumbnail-preview" src="${escapeSrc(cardVisual(c))}" alt="${h(c.name)}の一覧用サムネイル"/>
+            <div class="thumbnail-editor-actions"><button id="thumbnail-replace" class="action-primary" type="button">一覧用画像を変更</button>
+              <button id="thumbnail-reset" class="action-secondary" type="button" ${c.thumbnailPath?'':'disabled'}>メイン画像を使う</button>
+              <small class="edit-hint">画像変更はアップロード後すぐ保存されます。文章は下の「変更を保存」で保存してください。</small></div></div>
+        </section>
         <div class="profile-title">BASIC INFORMATION <span>↘</span></div><div id="editor-fields">${profileEditFields(c)}</div>
         <button type="button" id="add-field" class="action-secondary">＋ プロフィール項目を追加</button>
         <label class="publish-check"><input type="checkbox" name="published" ${c.published?'checked':''}/> このキャラを一般公開する</label>
@@ -211,10 +267,10 @@
         <div class="detail-name-wrap"><p class="detail-kicker">CHARACTER PROFILE</p><h1>${h(c.name)}</h1>${c.reading?`<p class="reading">${h(c.reading)}</p>`:''}</div>
         <div class="description-block"><p class="catchphrase">${h(c.catchphrase)}</p><p class="description">${h(c.description)}</p></div>
         <div class="profile-table"><div class="profile-title">BASIC INFORMATION <span>↘</span></div><dl>${fields}</dl></div>`;
-    const editMain = editing ? `<div class="image-edit-row"><button id="main-replace" class="action-primary" type="button">画像をタップして差し替え</button><button id="main-zoom" class="action-secondary" type="button">拡大</button></div>` : '';
+    const editMain = editing ? `<div class="image-edit-row"><button id="main-replace" class="action-primary" type="button">メイン画像を変更</button><button id="main-zoom" class="action-secondary" type="button">拡大</button></div>` : '';
     app.innerHTML = `
       <section class="detail-top"><a class="back-link" href="#/"><span>←</span> BACK TO CHARACTERS</a><span class="detail-file">CHARACTER FILE <span class="file-num">/ ${h(c.number)}</span></span></section>
-      <section class="detail-main"><div class="detail-art"><div class="main-art-frame"><button id="main-image-button" type="button" class="main-image-button" aria-label="${editing?'画像を変更':'現在の画像を拡大表示'}"><img id="detail-main-img" src="${escapeSrc(safeImage(c.imageItems[0]))}" alt="${h(c.name)}の画像" /><span class="zoom-hint">${editing?'↗ TAP TO REPLACE':'↗ CLICK TO ENLARGE'}</span></button></div>${editMain}<span class="art-corner-label">© ORIGINAL CHARACTER ARCHIVE</span></div>
+      <section class="detail-main"><div class="detail-art"><div class="main-art-frame"><button id="main-image-button" type="button" class="main-image-button" aria-label="${editing?'画像を変更':'現在の画像を拡大表示'}"><img id="detail-main-img" src="${escapeSrc(mainVisual(c))}" alt="${h(c.name)}の画像" /><span class="zoom-hint">${editing?'↗ TAP TO REPLACE':'↗ CLICK TO ENLARGE'}</span></button></div>${editMain}<span class="art-corner-label">© ORIGINAL CHARACTER ARCHIVE</span></div>
         <div class="detail-info"><div class="detail-info-top"><span class="character-tag"><span class="tag-dot"></span> ${h(c.category)}</span><span class="detail-number">NO. ${h(c.number)} ${state.admin&&!c.published?' / 非公開':''}</span></div>${textSection}</div></section>
       <section class="gallery-section" aria-label="画像ギャラリー"><div class="gallery-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> ADDITIONAL VISUALS</div><h2>GALLERY<span class="title-period">.</span></h2></div><p>${editing?'画像の差し替え・削除や並び替えができます。':'画像を選択して切り替えられます。'}<br/>拡大表示では左右の画像へ移動できます。</p></div>
         <div class="gallery-toolbar"><div><span id="gallery-current">${c.imageItems.length?'01':'00'}</span> <span class="gallery-slash">/</span> ${String(c.imageItems.length).padStart(2,'0')}</div><div class="gallery-buttons"><button id="gallery-prev" type="button" aria-label="前の画像">←</button><button id="gallery-next" type="button" aria-label="次の画像">→</button></div></div>
@@ -222,20 +278,37 @@
       <div class="bottom-navigation"><a href="#/">← RETURN TO ALL CHARACTERS</a><span>END OF FILE ${h(c.number)}</span></div>`;
     const mainAction = () => {
       if (!editing) return openLightbox();
-      const shown = c.imageItems[state.imageIndex];
-      chooseFile(shown?.kind === 'gallery' ? {kind:'replace', character:c, image:shown} : {kind:'main',character:c});
+      chooseFile({kind:'main',character:c});
     };
     $('#main-image-button').addEventListener('click', mainAction);
     if ($('#main-replace')) $('#main-replace').addEventListener('click', mainAction);
     if ($('#main-zoom')) $('#main-zoom').addEventListener('click', openLightbox);
+    if ($('#thumbnail-replace')) $('#thumbnail-replace').addEventListener('click', () => chooseFile({kind:'thumbnail',character:c}));
+    if ($('#thumbnail-reset')) $('#thumbnail-reset').addEventListener('click', () => resetThumbnail(c));
     $('#gallery-prev').addEventListener('click', () => showImage(state.imageIndex-1));
     $('#gallery-next').addEventListener('click', () => showImage(state.imageIndex+1));
     if ($('#gallery-add')) $('#gallery-add').addEventListener('click', () => chooseFile({kind:'add', character:c}));
     if (editing) {
       $('#character-edit-form').addEventListener('submit', saveCharacter);
       $('#delete-character').addEventListener('click', () => deleteCharacter(c));
-      $('#add-field').addEventListener('click', () => $('#editor-fields').insertAdjacentHTML('beforeend', '<div class="edit-profile-row"><input class="field-label" aria-label="項目名" placeholder="項目名" maxlength="60"/><input class="field-value" aria-label="内容" placeholder="内容" maxlength="500"/><button class="remove-field" type="button">×</button></div>'));
-      $('#editor-fields').addEventListener('click', event => { if(event.target.closest('.remove-field')) event.target.closest('.edit-profile-row').remove(); });
+      $('#add-field').addEventListener('click', () => {
+        $('#editor-fields').insertAdjacentHTML('beforeend', oneProfileEditField());
+        updateProfileMoveButtons();
+      });
+      $('#editor-fields').addEventListener('click', event => {
+        const row = event.target.closest('.edit-profile-row');
+        if (!row) return;
+        if (event.target.closest('.remove-field')) row.remove();
+        const button = event.target.closest('[data-field-move]');
+        if (button && !button.disabled) {
+          if (button.dataset.fieldMove === 'up' && row.previousElementSibling) row.previousElementSibling.before(row);
+          if (button.dataset.fieldMove === 'down' && row.nextElementSibling) row.nextElementSibling.after(row);
+          // フォーム入力を再生成せず、DOMだけ動かすので入力途中の文字が消えません。
+          button.focus();
+        }
+        updateProfileMoveButtons();
+      });
+      updateProfileMoveButtons();
     }
     renderGalleryThumbs(c, editing);
   }
@@ -348,6 +421,12 @@
     const data = new FormData(f);
     const name = String(data.get('name')||'').trim();
     if (!name) return message('名前を入力してください。', true);
+    const number = String(data.get('number')||'').trim();
+    if (!number) return message('キャラクター番号を入力してください。', true);
+    if (state.chars.some(other => other.dbId !== c.dbId && other.number === number)) {
+      return message(`番号「${number}」は別のキャラに使用されています。別の番号を入力してください。`, true);
+    }
+    const affiliation = String(data.get('affiliation')||'').trim() || '所属未設定';
     const fields = $$('.edit-profile-row',f).map(row => ({
       label:$('.field-label',row).value.trim(), value:$('.field-value',row).value.trim()
     })).filter(row => row.label || row.value);
@@ -355,7 +434,7 @@
       const values = {
         name, name_reading:String(data.get('reading')||''), description:String(data.get('description')||''),
         is_published:data.get('published')==='on',
-        profile:{ number:c.number, category:String(data.get('category')||'ORIGINAL CHARACTER'), catchphrase:String(data.get('catchphrase')||''), fields },
+        profile:{ ...c.rawProfile, number, affiliation, category:String(data.get('category')||'ORIGINAL CHARACTER'), catchphrase:String(data.get('catchphrase')||''), fields },
       };
       const {data:rows,error} = await state.db.from('characters').update(values).eq('id',c.dbId).select('id').single();
       if (error || !rows) throw error || Error('保存対象が見つかりません。');
@@ -370,7 +449,8 @@
     await mutation(async () => {
       const {data,error} = await state.db.from('characters').insert({
         slug, name:name.trim().slice(0,120), description:'', is_published:false,
-        sort_order:state.chars.length, profile:{number:String(state.chars.length+1).padStart(3,'0'),category:'ORIGINAL CHARACTER',catchphrase:'',fields:[]},
+        sort_order:Math.max(-1,...state.chars.map(c => c.sortOrder ?? -1)) + 1,
+        profile:{number:String(Math.max(0,...state.chars.map(c => parseInt(c.number,10)||0))+1).padStart(3,'0'),affiliation:'所属未設定',category:'ORIGINAL CHARACTER',catchphrase:'',fields:[]},
       }).select('id').single();
       if (error || !data) throw error || Error('作成できませんでした。');
     },'非公開キャラクターを新規登録しました。');
@@ -379,7 +459,7 @@
   async function deleteCharacter(c) {
     if (!confirm(`「${c.name}」を削除しますか？\nプロフィールと画像の参照が削除されます。この操作は元に戻せません。`)) return;
     await mutation(async () => {
-      const paths = [c.mainPath,...c.extraImages.map(i=>i.storage_path)].filter(p => p && !isLocal(p));
+      const paths = [...new Set([c.mainPath,c.thumbnailPath,...c.extraImages.map(i=>i.storage_path)].filter(p => p && !isLocal(p)))];
       const {error} = await state.db.from('characters').delete().eq('id',c.dbId);
       if (error) throw error;
       if (paths.length) { const result=await fromStore().remove(paths); if(result.error) console.warn('Storage cleanup:',result.error.message); }
@@ -401,7 +481,12 @@
       const up = await fromStore().upload(path, file, {contentType:file.type, cacheControl:'3600', upsert:false});
       if (up.error) throw up.error;
       try {
-        if (target.kind==='main' || target.image?.kind==='main') {
+        if (target.kind==='thumbnail') {
+          const {data:row,error:readError} = await state.db.from('characters').select('profile').eq('id',target.character.dbId).single();
+          if (readError) throw readError;
+          const {error} = await state.db.from('characters').update({profile:{...(row.profile || {}),thumbnailPath:path}}).eq('id',target.character.dbId);
+          if (error) throw error;
+        } else if (target.kind==='main' || target.image?.kind==='main') {
           const {error} = await state.db.from('characters').update({main_image_path:path}).eq('id',target.character.dbId);
           if (error) throw error;
         } else if (target.kind==='replace') {
@@ -413,13 +498,38 @@
           if (error) throw error;
         }
       } catch (err) { await fromStore().remove([path]); throw err; }
-      const oldPath = target.kind==='main' ? target.character.mainPath : target.image?.path;
-      if (oldPath && !isLocal(oldPath) && oldPath!==path) {
+      const oldPath = target.kind==='thumbnail' ? target.character.thumbnailPath
+        : target.kind==='main' ? target.character.mainPath : target.image?.path;
+      // 別の表示場所で参照されている画像ファイルは削除しません。
+      // 画像パスを直接共有している場合は、削除ではなく残す方を優先します。
+      const sharedElsewhere = target.kind==='thumbnail'
+        ? oldPath === target.character.mainPath || target.character.extraImages.some(i=>i.storage_path===oldPath)
+        : target.kind==='main'
+          ? oldPath === target.character.thumbnailPath || target.character.extraImages.some(i=>i.storage_path===oldPath)
+          : oldPath === target.character.mainPath || oldPath === target.character.thumbnailPath || target.character.extraImages.some(i=>i.storage_path===oldPath && i.dbImageId!==target.image?.dbImageId);
+      if (oldPath && !isLocal(oldPath) && oldPath!==path && !sharedElsewhere) {
         const clean = await fromStore().remove([oldPath]);
         if (clean.error) console.warn('Could not clean old image:',clean.error.message);
       }
     },'画像をアップロードしました。');
   });
+  function resetThumbnail(c) {
+    if (!c.thumbnailPath) return;
+    mutation(async () => {
+      const {data:row,error:readError} = await state.db.from('characters').select('profile').eq('id',c.dbId).single();
+      if (readError) throw readError;
+      const profile = {...(row.profile || {})};
+      // 別の端末ですでに別画像に変更されている場合も、現在の保存値だけ解除します。
+      const oldPath = profile.thumbnailPath;
+      profile.thumbnailPath = null;
+      const {error} = await state.db.from('characters').update({profile}).eq('id',c.dbId);
+      if (error) throw error;
+      if (oldPath && !isLocal(oldPath) && oldPath!==c.mainPath && !c.extraImages.some(i=>i.storage_path===oldPath)) {
+        const clean = await fromStore().remove([oldPath]);
+        if (clean.error) console.warn('Thumbnail cleanup:',clean.error.message);
+      }
+    },'一覧の画像をメイン画像に戻しました。');
+  }
   function deleteGalleryImage(img) {
     if (!img?.dbImageId || !confirm('このギャラリー画像を削除しますか？')) return;
     mutation(async () => {
@@ -461,7 +571,7 @@
         const {data,error} = await state.db.from('characters').insert({
           slug:c.id, name:c.name, name_reading:c.reading||'', description:c.description,
           main_image_path:c.images[0]?.src||null, is_published:true, sort_order:i,
-          profile:{ number:c.number, category:c.category, catchphrase:c.catchphrase, fields:c.profile },
+          profile:{ number:c.number, affiliation:c.affiliation || fallbackAffiliation(c.category), category:c.category, catchphrase:c.catchphrase, fields:c.profile, thumbnailPath:c.thumbnailSrc || null },
         }).select('id').single();
         if (error) throw error;
         if (c.images.length>1) {
@@ -473,7 +583,12 @@
     },'サンプル6人を登録しました。');
   }
   function downloadBackup() {
-    const data = state.chars.map(c => ({name:c.name,slug:c.slug,description:c.description,reading:c.reading,category:c.category,catchphrase:c.catchphrase,profile:c.profile,published:c.published,mainPath:c.mainPath,gallery:c.extraImages?.map(i=>({path:i.storage_path,caption:i.caption,sortOrder:i.sort_order}))||[]}));
+    const data = state.chars.map(c => ({
+      name:c.name,slug:c.slug,number:c.number,sortOrder:c.sortOrder,description:c.description,
+      reading:c.reading,category:c.category,affiliation:affiliationOf(c),catchphrase:c.catchphrase,
+      profile:c.profile,published:c.published,mainPath:c.mainPath,thumbnailPath:c.thumbnailPath,
+      gallery:c.extraImages?.map(i=>({path:i.storage_path,caption:i.caption,sortOrder:i.sort_order}))||[],
+    }));
     const blob = new Blob([JSON.stringify({exportedAt:new Date().toISOString(),characters:data},null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob), a=document.createElement('a');
     a.href=url;a.download=`hizumi-kyosei-backup-${new Date().toISOString().slice(0,10)}.json`;
