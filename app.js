@@ -1,4 +1,4 @@
-/* 歪矯正 ver.0.7: キャラクターと事件の相互参照・時系列事件記録 */
+/* 歪矯正 ver.0.8: 新規キャラクターに共通プロフィール項目を用意 */
 (() => {
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -697,6 +697,18 @@
       if (error || !rows) throw error || Error('保存対象が見つかりません。');
     },'文章と公開設定を保存しました。');
   }
+  // 新しいキャラクターには「上府 才一」の現在のプロフィール項目名を初期設定します。
+  // 記入内容はキャラごとに異なるため複製せず、空欄にします。
+  // 項目の追加・削除・並び替えは既存の編集機能で自由に行えます。
+  function initialCharacterFields() {
+    const reference = state.chars.find(c => c.slug === 'character-28e8db7a-cd4b-4465-a909-918c2ac4cebf') ||
+      state.chars.find(c => String(c.name || '').replace(/\s/g, '') === '上府才一');
+    // テンプレート元が一時的に見つからない場合は、元から使っていた項目を用意します。
+    const fields = Array.isArray(reference?.profile) ? reference.profile : [{label:'ソウゾウ', value:''}];
+    return fields.filter(field => typeof field?.label === 'string' && field.label.trim())
+      .map(field => ({label:field.label.trim(), value:''}));
+  }
+
   async function createCharacter() {
     if (state.busy) return;
     const name = prompt('新しいキャラクターの名前を入力してください。');
@@ -707,7 +719,7 @@
       const {data,error} = await state.db.from('characters').insert({
         slug, name:name.trim().slice(0,120), description:'', is_published:false,
         sort_order:Math.max(-1,...state.chars.map(c => c.sortOrder ?? -1)) + 1,
-        profile:{number:String(Math.max(0,...state.chars.map(c => parseInt(c.number,10)||0))+1).padStart(3,'0'),affiliation:'所属未設定',category:'ORIGINAL CHARACTER',catchphrase:'',fields:[]},
+        profile:{number:String(Math.max(0,...state.chars.map(c => parseInt(c.number,10)||0))+1).padStart(3,'0'),affiliation:'所属未設定',category:'ORIGINAL CHARACTER',catchphrase:'',fields:initialCharacterFields()},
       }).select('id').single();
       if (error || !data) throw error || Error('作成できませんでした。');
     },'非公開キャラクターを新規登録しました。');
